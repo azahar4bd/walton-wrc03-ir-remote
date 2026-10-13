@@ -13,3 +13,5 @@
 /app/release
 .externalNativeBuild
 .cxx
+__pycache__/
+*.pyc
