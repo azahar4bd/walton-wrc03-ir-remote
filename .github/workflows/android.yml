@@ -24,17 +24,22 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # The GitHub runner images already ship the Android SDK; just make sure the
-      # platform/build-tools this project compiles against are present.
-      - name: Install Android SDK packages
+      - name: Probe Android SDK layout  # TEMPORARY DIAGNOSTIC
         run: |
-          set -euo pipefail
-          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
-
-      - name: Verify NEC reference vectors
-        run: python3 tools/verify_nec_reference.py
+          set -uo pipefail
+          echo "::warning::ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-UNSET}"
+          echo "::warning::ANDROID_HOME=${ANDROID_HOME:-UNSET}"
+          for dir in /usr/local/lib/android/sdk /opt/android/sdk "$HOME/Android/Sdk"; do
+            if [ -d "$dir" ]; then
+              echo "::warning::found sdk dir: $dir"
+              ls -1 "$dir" | head -20 | while read -r entry; do echo "::warning::$dir entry: $entry"; done
+              ls -1 "$dir/platforms" 2>/dev/null | while read -r entry; do echo "::warning::$dir platform: $entry"; done
+              ls -1 "$dir/build-tools" 2>/dev/null | while read -r entry; do echo "::warning::$dir build-tools: $entry"; done
+              ls -1 "$dir/cmdline-tools" 2>/dev/null | while read -r entry; do echo "::warning::$dir cmdline-tools: $entry"; done
+            fi
+          done
+          command -v sdkmanager >/dev/null 2>&1 && echo "::warning::sdkmanager on PATH" || echo "::warning::sdkmanager NOT on PATH"
+          exit 0
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -44,6 +49,8 @@ jobs:
 
       - name: Run JVM unit tests
         run: ./gradlew testDebugUnitTest
+      - name: Verify NEC reference vectors
+        run: python3 tools/verify_nec_reference.py
 
       - name: Upload unit test report
         if: always()
@@ -69,12 +76,8 @@ jobs:
 
       # The GitHub runner images already ship the Android SDK; just make sure the
       # platform/build-tools this project compiles against are present.
-      - name: Install Android SDK packages
-        run: |
-          set -euo pipefail
-          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - name: Skip explicit SDK install for now  # TEMPORARY
+        run: echo "relying on the preinstalled SDK"
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
