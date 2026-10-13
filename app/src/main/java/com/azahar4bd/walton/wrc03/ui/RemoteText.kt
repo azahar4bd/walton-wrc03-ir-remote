@@ -1,6 +1,7 @@
 package com.azahar4bd.walton.wrc03.ui
 
 import com.azahar4bd.walton.wrc03.ir.IrAvailability
+import com.azahar4bd.walton.wrc03.ir.NecAddressMode
 import com.azahar4bd.walton.wrc03.ir.IrSendResult
 import com.azahar4bd.walton.wrc03.ir.NecProtocol
 import com.azahar4bd.walton.wrc03.model.RemoteCommand
@@ -57,7 +58,7 @@ object RemoteText {
     }
 
     fun profileSummary(profile: RemoteProfile): String {
-        val mode = if (profile.addressMode == com.azahar4bd.walton.wrc03.ir.NecAddressMode.STANDARD) "৮-বিট" else "১৬-বিট"
+        val mode = if (profile.addressMode == NecAddressMode.STANDARD) "৮-বিট" else "১৬-বিট"
         val hex = profile.addressHex()
         return "ঠিকানা $hex ($mode) · ক্যারিয়ার ${profile.carrierHz} Hz · " +
             if (profile.verified) "যাচাইকৃত" else "যাচাই হয়নি"
@@ -93,7 +94,7 @@ object RemoteText {
     }
 
     private fun RemoteProfile.addressHex(): String =
-        if (addressMode == com.azahar4bd.walton.wrc03.ir.NecAddressMode.STANDARD) {
+        if (addressMode == NecAddressMode.STANDARD) {
             "0x${address.toString(16).uppercase().padStart(2, '0')}"
         } else {
             "0x${address.toString(16).uppercase().padStart(4, '0')}"

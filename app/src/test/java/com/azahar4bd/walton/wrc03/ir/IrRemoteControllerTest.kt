@@ -1,6 +1,7 @@
 package com.azahar4bd.walton.wrc03.ir
 
 import com.azahar4bd.walton.wrc03.data.RemoteProfiles
+import com.azahar4bd.walton.wrc03.model.CodeConfidence
 import com.azahar4bd.walton.wrc03.model.CommandGroup
 import com.azahar4bd.walton.wrc03.model.IrCode
 import com.azahar4bd.walton.wrc03.model.RemoteCommand
@@ -135,7 +136,7 @@ class IrRemoteControllerTest {
                 nameBn = "আংশিক",
                 address = 0x00,
                 addressMode = NecAddressMode.STANDARD,
-                commands = mapOf(RemoteCommand.POWER to IrCode(0x45, com.azahar4bd.walton.wrc03.model.CodeConfidence.DOCUMENTED)),
+                commands = mapOf(RemoteCommand.POWER to IrCode(0x45, CodeConfidence.DOCUMENTED)),
                 sourceNoteBn = "",
             )
         assertTrue(partial.codeFor(RemoteCommand.POWER) != null)
