@@ -24,8 +24,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # The GitHub runner images already ship the Android SDK; just make sure the
+      # platform/build-tools this project compiles against are present.
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Verify NEC reference vectors
         run: python3 tools/verify_nec_reference.py
@@ -61,8 +67,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # The GitHub runner images already ship the Android SDK; just make sure the
+      # platform/build-tools this project compiles against are present.
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
