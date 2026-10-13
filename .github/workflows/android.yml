@@ -86,10 +86,6 @@ jobs:
                   )
 
           print(
-              "::warning::TESTS total={tests} failures={failures} errors={errors} "
-              "skipped={skipped} classes={classes}".format(classes=len(rows), **totals)
-          )
-          print(
               "TESTS total={tests} failures={failures} errors={errors} skipped={skipped} "
               "classes={classes}".format(classes=len(rows), **totals)
           )
