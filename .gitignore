@@ -1,0 +1,15 @@
+# Gradle / IDE
+*.iml
+.gradle/
+/local.properties
+/.idea/
+/.kotlin/
+.DS_Store
+
+# Build output
+/build
+/app/build
+/captures
+/app/release
+.externalNativeBuild
+.cxx

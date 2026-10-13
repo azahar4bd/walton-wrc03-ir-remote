@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ওয়ালটন WRC-03 রিমোট</string>
+    <string name="subtitle">Walton WRC-03 · 38 kHz NEC (6122 ফ্যামিলি)</string>
+
+    <string name="status_heading">IR হার্ডওয়্যার</string>
+    <string name="status_unknown">অবস্থা যাচাই করা যায়নি</string>
+
+    <string name="warning_title">সতর্কতা — কোড টেবিল যাচাই করা হয়নি</string>
+    <string name="warning_body">এই অ্যাপের বাটন-কোডগুলো কমিউনিটি কোড শিট আর কিছু অনুমান থেকে এসেছে; Walton WRC-03 রিমোট দিয়ে কোনোটিই পরীক্ষা করা হয়নি। ভুল কোডে টিভির ক্ষতি হয় না, শুধু বাটন কাজ করবে না।</string>
+    <string name="warning_legend">প্রশ্নবোধক চিহ্ন (?) থাকা বাটনের কোড অনুমানভিত্তিক।</string>
+
+    <string name="profile_label">প্রোফাইল বদলান</string>
+    <string name="profile_hint">একটা বাটন কাজ না করলে অন্য প্রোফাইল চেষ্টা করুন।</string>
+
+    <string name="last_sent_label">সর্বশেষ সিগন্যাল</string>
+    <string name="last_sent_none">এখনো কোনো সিগন্যাল পাঠানো হয়নি</string>
+
+    <string name="action_code_list">কোড তালিকা</string>
+    <string name="action_help">সাহায্য</string>
+    <string name="action_close">বন্ধ</string>
+
+    <string name="code_list_title">বর্তমান প্রোফাইলের কোড</string>
+
+    <string name="help_title">সাহায্য ও সীমাবদ্ধতা</string>
+    <string name="help_body">১। বাটন চাপলে অ্যাপটি 38 kHz ক্যারিয়ারে NEC (6122 ফ্যামিলি) ফ্রেম পাঠায় — 9 ms লিডার বার্স্ট, 4.5 ms গ্যাপ, 32 বিট ডেটা (প্রতি বাইট LSB প্রথমে)।\n\n২। ফোনে IR blaster না থাকলে কোনো সিগন্যাল যায় না। উপরের স্ট্যাটাস কার্ডে সেটা লেখা থাকবে; Xiaomi/Redmi, Huawei/Honor, OnePlus, Realme-এর নির্দিষ্ট মডেলে IR থাকে।\n\n৩। কোড টেবিল যাচাই করা হয়নি। আসল রিমোট থেকে কোড ক্যাপচার করতে TSOP/VS1838B রিসিভার আর Arduino দিয়ে IRremote লাইব্রেরির ReceiveDump ব্যবহার করুন, তারপর app/src/main/java/…/data/RemoteProfiles.kt ফাইলে মানগুলো বসিয়ে দিন।\n\n৪। ভলিউম, চ্যানেল আর ডি-প্যাড বাটন ধরে রাখলে রিমোটের মতো রিপিট ফ্রেম যায়।\n\n৫। টিভির সামনে ২–৫ মিটারের মধ্যে, IR LED সরাসরি টিভির দিকে রেখে ব্যবহার করুন।</string>
+</resources>
