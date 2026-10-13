@@ -10,6 +10,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # AGP downloads a missing platform / build-tools automatically; the runner image
+  # already ships the Android SDK at $ANDROID_SDK_ROOT.
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
 jobs:
   test:
     name: Test (unit tests + IR reference vectors)
@@ -24,22 +29,8 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Probe Android SDK layout  # TEMPORARY DIAGNOSTIC
-        run: |
-          set -uo pipefail
-          echo "::warning::ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-UNSET}"
-          echo "::warning::ANDROID_HOME=${ANDROID_HOME:-UNSET}"
-          for dir in /usr/local/lib/android/sdk /opt/android/sdk "$HOME/Android/Sdk"; do
-            if [ -d "$dir" ]; then
-              echo "::warning::found sdk dir: $dir"
-              ls -1 "$dir" | head -20 | while read -r entry; do echo "::warning::$dir entry: $entry"; done
-              ls -1 "$dir/platforms" 2>/dev/null | while read -r entry; do echo "::warning::$dir platform: $entry"; done
-              ls -1 "$dir/build-tools" 2>/dev/null | while read -r entry; do echo "::warning::$dir build-tools: $entry"; done
-              ls -1 "$dir/cmdline-tools" 2>/dev/null | while read -r entry; do echo "::warning::$dir cmdline-tools: $entry"; done
-            fi
-          done
-          command -v sdkmanager >/dev/null 2>&1 && echo "::warning::sdkmanager on PATH" || echo "::warning::sdkmanager NOT on PATH"
-          exit 0
+      - name: Verify NEC reference vectors
+        run: python3 tools/verify_nec_reference.py
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -49,8 +40,64 @@ jobs:
 
       - name: Run JVM unit tests
         run: ./gradlew testDebugUnitTest
-      - name: Verify NEC reference vectors
-        run: python3 tools/verify_nec_reference.py
+
+      - name: Summarise unit test results
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import os
+          import re
+          import sys
+
+          results = sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml"))
+          rows = []
+          totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
+
+          for path in results:
+              head = open(path, encoding="utf-8").read(4000)
+              tag = re.search(r"<testsuite[^>]*>", head)
+              if not tag:
+                  continue
+              tag = tag.group(0)
+
+              def number(name):
+                  found = re.search(name + r'="(\d+)"', tag)
+                  return int(found.group(1)) if found else 0
+
+              counts = {key: number(key) for key in totals}
+              for key, value in counts.items():
+                  totals[key] += value
+              rows.append((os.path.basename(path), counts))
+
+          lines = ["| test class | tests | failures | errors | skipped |", "| --- | --- | --- | --- | --- |"]
+          lines += [
+              "| `{name}` | {tests} | {failures} | {errors} | {skipped} |".format(name=name, **counts)
+              for name, counts in rows
+          ]
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as summary:
+                  summary.write("## Unit tests\n\n")
+                  summary.write("\n".join(lines))
+                  summary.write(
+                      "\n\n**Total: {tests} tests, {failures} failures, {errors} errors, "
+                      "{skipped} skipped**\n".format(**totals)
+                  )
+
+          print(
+              "::warning::TESTS total={tests} failures={failures} errors={errors} "
+              "skipped={skipped} classes={classes}".format(classes=len(rows), **totals)
+          )
+          print(
+              "TESTS total={tests} failures={failures} errors={errors} skipped={skipped} "
+              "classes={classes}".format(classes=len(rows), **totals)
+          )
+          if totals["tests"] == 0:
+              sys.exit("no unit tests were executed")
+          if totals["failures"] or totals["errors"]:
+              sys.exit("unit test failures or errors")
+          PY
 
       - name: Upload unit test report
         if: always()
@@ -73,11 +120,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-
-      # The GitHub runner images already ship the Android SDK; just make sure the
-      # platform/build-tools this project compiles against are present.
-      - name: Skip explicit SDK install for now  # TEMPORARY
-        run: echo "relying on the preinstalled SDK"
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
