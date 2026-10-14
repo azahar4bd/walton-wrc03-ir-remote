@@ -22,8 +22,10 @@ blaster দিয়ে সরাসরি টিভিতে সিগন্য
 - তিনটি প্রোফাইলেই একই কমান্ড টেবিল; পার্থক্য শুধু NEC ঠিকানা ব্লকে
   (`0x00`, `0x00FF`, `0x807F`)। একটা দিয়ে কাজ না করলে বাকিগুলো চেষ্টা করুন।
 
-ভুল কোডে টিভির কোনো ক্ষতি হয় না — শুধু কিছু ঘটবে না। আসল রিমোট থেকে কোড ক্যাপচার করে
-টেবিল ঠিক করার পদ্ধতি নিচে দেওয়া আছে।
+ভুল কোডে টিভির কোনো ক্ষতি হয় না — শুধু কিছু ঘটবে না। তাই অ্যাপেই **কোড স্ক্যান মোড** আছে:
+সম্ভাব্য NEC কোড একে একে টিভিতে পাঠিয়ে কোনটি কাজ করে বের করে সেটা সংরক্ষণ করে ফেলা যায়
+(নিচের “কোড স্ক্যান মোড” অংশ দেখুন)। আরও নিশ্চিত হতে চাইলে আসল রিমোট থেকে কোড ক্যাপচার
+করে টেবিল ঠিক করার পদ্ধতিও নিচে দেওয়া আছে।
 
 ---
 
@@ -41,8 +43,51 @@ blaster দিয়ে সরাসরি টিভিতে সিগন্য
   (৪০০ ms পর শুরু, এরপর প্রতি ২৫০ ms)।
 - প্রতিটি প্রেসে haptic ফিডব্যাক এবং “সর্বশেষ সিগন্যাল” লাইনে কোড/ক্যারিয়ার দেখা যায়।
 - “কোড তালিকা” ডায়ালগে বর্তমান প্রোফাইলের পুরো কোড শিট (কোনটা তথ্যসূত্রভিত্তিক, কোনটা
-  অনুমান) দেখা যায়।
+  অনুমান, কোনটা স্ক্যানে পাওয়া) দেখা যায়।
+- **কোড স্ক্যান মোড**: যেসব বাটনের কোড অনুমানভিত্তিক, সেগুলোর সঠিক কোড টিভির সামনে বসেই
+  খুঁজে বের করে সংরক্ষণ করা যায় (বিস্তারিত নিচে)।
 - সম্পূর্ণ বাংলা UI।
+
+## কোড স্ক্যান মোড
+
+কোড টেবিল যাচাই করা হয়নি, তাই অ্যাপেই একটা স্ক্যানার আছে: একটি বাটনের জন্য সম্ভাব্য NEC
+ফ্রেম একে একে ৩৮ kHz-এ পাঠানো হয়, আর টিভি সাড়া দিলে ব্যবহারকারী **“টিভি সাড়া দিয়েছে!”**
+চেপে সেই কোডটি সংরক্ষণ করেন। সংরক্ষিত কোড পরেরবার থেকে ওই বাটনেই যায় — বাটনের গায়ে তখন
+`?`-এর বদলে `✓` দেখা যায়।
+
+খোলার দুই উপায়: মূল স্ক্রিনের **“কোড স্ক্যান চালান”** বাটন, অথবা কিপ্যাডের যেকোনো বাটন
+**লং-প্রেস** (সরাসরি সেই বাটনের স্ক্যান খোলে)।
+
+| নিয়ন্ত্রণ | কী করে |
+| --- | --- |
+| বাটন বাছাই | কোন কমান্ডের কোড খোঁজা হবে (ডিফল্ট: পাওয়ার) |
+| স্ক্যানের পরিধি | নিচের চারটি প্রিসেটের একটি |
+| বিরতি স্লাইডার | প্রতি কোডের মধ্যে ০.৬–৩.০ সেকেন্ড (ডিফল্ট ১.২) |
+| শুরু / পজ / নতুন করে শুরু | স্ক্যান চালানো-থামানো |
+| এক ধাপ | অপেক্ষা না করে পরের কোডে যাওয়া |
+| টিভি সাড়া দিয়েছে! | চলতি কোডটি সংরক্ষণযোগ্য তালিকায় তোলা + স্ক্যান পজ |
+| সংরক্ষণ করে বন্ধ করুন | পাওয়া কোডগুলো ফোনে লিখে মূল স্ক্রিনে ফেরা |
+
+প্রিসেট (ঠিকানা ব্লক × কমান্ড বাইট):
+
+| প্রিসেট | প্রার্থী কোড | কী ধরনের স্ক্যান |
+| --- | --- | --- |
+| দ্রুত স্ক্যান | ৫৪ | ৩টি প্রোফাইল ঠিকানা × প্রকাশিত কোড শিটের ১৮টি মান |
+| প্রচলিত ঠিকানা ব্লক | ৯০ | বাইট-উল্টো/শূন্য ঠিকানা ব্লকসহ (ওয়্যারে একই ফ্রেম বাদ) × ১৮টি মান |
+| প্রোফাইল ঠিকানা, পুরো বাইট | ৭৬৮ | ৩টি প্রোফাইল ঠিকানা × ০x০০–০xFF |
+| শুধু এই প্রোফাইলের ঠিকানা | ২৫৬ | বর্তমান প্রোফাইলের ঠিকানা × ০x০০–০xFF |
+
+কয়েকটা জরুরি বিষয়:
+
+- প্রতিটি কোড **দুইবার** যায় (১১০ ms বিরতিতে), কারণ এক ফ্রেম টিভি মিস করতে পারে।
+- ওই একই দুই ফ্রেম ওয়্যারে হুবহু এক হলে প্রিসেটে **দ্বিতীয়বার রাখা হয় না** — যেমন
+  `0xFF` (৮-বিট) আর `0x00FF` (১৬-বিট) আসলে একই বাইট পাঠায়।
+- স্ক্রিন ছেড়ে দিলেই (`onPause`) স্ক্যান পজ হয়ে যায় — পকেটে ঢুকিয়ে টিভি বোমাবর্ষণ হয় না।
+- IR blaster না থাকলে স্ক্যান শুরুতেই থেমে গিয়ে বাংলায় কারণ দেখায়।
+- সংরক্ষিত কোড `SharedPreferences`-এ (`scanned_codes`) থাকে, শুধু ওই ফোনে; যে প্রোফাইলের
+  ঠিকানা ব্লকে কোডটি পাওয়া গেছে, কেবল সেই প্রোফাইলেই তা প্রযোজ্য হয়। শিপ করা
+  `RemoteProfiles.kt` টেবিল অপরিবর্তিত থাকে, আর প্রোফাইল `verified = true` হয়ে যায় না।
+- স্ক্যান চলাকালীন টিভির ভলিউম/চ্যানেল বদলে যেতে পারে — কাছাকাছি বসে পর্দার দিকে নজর রাখুন।
 
 ## ফোনে IR blaster না থাকলে
 
@@ -93,18 +138,49 @@ EXTENDED : addr.lowByte, addr.highByte, cmd, ~cmd
 ./gradlew testDebugUnitTest   # JVM unit tests
 ./gradlew assembleDebug       # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew installDebug        # কানেক্টেড ডিভাইসে ইনস্টল
+./gradlew assembleRelease     # app/build/outputs/apk/release/app-release.apk
 ```
 
 চাই: JDK 17 (Temurin), Android SDK (compileSdk 35)। `minSdk 23`, `targetSdk 35`।
 
+`assembleRelease` কোনো কীস্টোর দিলে সেটা ব্যবহার করে, না দিলে লোকাল debug কী দিয়ে স্বাক্ষর
+করে — দুই ক্ষেত্রেই ইনস্টল করার মতো APK তৈরি হয়:
+
+```bash
+./gradlew assembleRelease \
+  -PreleaseKeystorePath=/path/to/wrc03.jks \
+  -PreleaseStorePassword=... -PreleaseKeyAlias=... -PreleaseKeyPassword=...
+```
+
+কীস্টোর কোনোমতেই git-এ দেবেন না (`.gitignore`-এ build আউটপুট আছে, তবুও সতর্কতা)।
+
 ### Actions থেকে APK
 
 `Android CI` workflow (`.github/workflows/android.yml`) প্রতি push/PR-এ চলে:
-প্রথমে unit test + NEC রেফারেন্স চেক, তারপর `assembleDebug`। সবুজ হয়ে গেলে run-এর
-নিচে **Artifacts** থেকে `walton-wrc03-debug-apk` ডাউনলোড করলেই ইনস্টল করার মতো APK
-পাওয়া যাবে।
+প্রথমে NEC রেফারেন্স চেক + রিসোর্স/বাইন্ডিং সামঞ্জস্য যাচাই, তারপর unit test, তারপর
+`assembleDebug`। সবুজ হয়ে গেলে run-এর নিচে **Artifacts** থেকে `walton-wrc03-debug-apk`
+ডাউনলোড করলেই ইনস্টল করার মতো APK পাওয়া যাবে।
+
+### GitHub Release (স্বাক্ষরিত APK)
+
+`v*` ট্যাগ পুশ করলে `release` job চলে: unit test + debug বিল্ড সবুজ হলে `assembleRelease`
+হয়, APK-টি `walton-wrc03-<ভার্সন>.apk` নামে সেই ট্যাগের **Releases**-এ যুক্ত হয় —
+সাথে SHA-256, স্বাক্ষরের উৎস আর ট্যাগ-দুটির মধ্যের কমিট তালিকা।
+
+```bash
+git tag -a v0.2.0 -m "কোড স্ক্যান মোড" && git push origin v0.2.0
+```
+
+CI-তে `RELEASE_KEYSTORE_BASE64` (+ `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`,
+`RELEASE_KEY_PASSWORD`) সিক্রেট থাকলে সেই স্থায়ী কী ব্যবহৃত হয়; না থাকলে ওই run-এর জন্য
+একটি ephemeral কী বানিয়ে নেওয়া হয় (sideload-এর জন্য ঠিক আছে, কিন্তু পরের রিলিজের APK
+তার আগের রিলিজের উপরে ইনস্টল হবে না)।
 
 ## কোড টেবিল কীভাবে ঠিক করবেন
+
+সবচেয়ে সহজ পথ অ্যাপের **কোড স্ক্যান মোড** (উপরে দেখুন): টিভির সামনে বসে স্ক্যান চালালে
+ঠিকানা + কোড স্ক্রিনেই দেখা যায়, সেটা নোট করে নিচের ধাপ ৩-এ বসিয়ে দিলেই রিপোজিটরির টেবিলও
+ঠিক হয়ে যায়। হার্ডওয়্যার দিয়ে যাচাই করতে চাইলে:
 
 1. Arduino + TSOP/VS1838B রিসিভার দিয়ে [IRremote](https://github.com/Arduino-IRremote/Arduino-IRremote)
    লাইব্রেরির `ReceiveDump` স্কেচ চালান।
@@ -126,31 +202,50 @@ EXTENDED : addr.lowByte, addr.highByte, cmd, ~cmd
 
 ```
 app/src/main/java/com/azahar4bd/walton/wrc03/
-├── MainActivity.kt              # একমাত্র স্ক্রিন: স্ট্যাটাস, প্রোফাইল, কিপ্যাড
+├── MainActivity.kt              # মূল স্ক্রিন: স্ট্যাটাস, প্রোফাইল, কিপ্যাড, স্ক্যান এন্ট্রি
+├── CodeScanActivity.kt          # কোড স্ক্যান মোডের স্ক্রিন (শুধু ভিউ + Handler)
 ├── ir/
 │   ├── NecProtocol.kt           # টাইমিং কনস্ট্যান্ট, NecFrame, NecEncoder
 │   ├── IrHardware.kt            # ConsumerIrManager-এর abstraction
 │   ├── ConsumerIrHardware.kt    # আসল Android implementation
 │   ├── IrAvailability.kt        # IR আছে/নেই/৩৮ kHz সমর্থন করে কিনা
-│   └── IrRemoteController.kt    # বাটন → ফ্রেম → transmit (+ বাংলা এরর মেসেজ)
-├── model/                       # RemoteCommand, RemoteProfile, IrCode
-├── data/RemoteProfiles.kt       # ⚠️ যাচাইবিহীন কোড টেবিল
+│   └── IrRemoteController.kt    # বাটন → ফ্রেম → transmit (+ explicit ফ্রেম পাঠানো)
+├── scan/
+│   ├── ScanAddress.kt           # ঠিকানা ব্লক + ওয়্যার-ভিত্তিক ডি-ডুপ, কোড সেট
+│   ├── ScanPlan.kt              # ScanCandidate, ScanPlan, ScanPlanBuilder
+│   ├── ScanPreset.kt            # চারটি স্ক্যান প্রিসেট (পরিধি)
+│   ├── ScanScheduler.kt         # ScanScheduler + ScanTransmitter seam
+│   ├── HandlerScanScheduler.kt  # Handler-ভিত্তিক বাস্তব scheduler
+│   ├── ScanState.kt             # ScanState + ScanSnapshot (UI-এর সব তথ্য একসাথে)
+│   └── CodeScanEngine.kt        # স্ক্যানের state machine (Android-মুক্ত)
+├── model/                       # RemoteCommand, RemoteProfile, IrCode, ScannedCode
+├── data/
+│   ├── RemoteProfiles.kt        # ⚠️ যাচাইবিহীন কোড টেবিল
+│   └── ScannedCodeStore.kt      # স্ক্যানে পাওয়া কোডের SharedPreferences স্টোর
 └── ui/                          # RemoteKeypadLayout, RemoteText (বাংলা টেক্সট)
 tools/verify_nec_reference.py    # স্পেক-ভিত্তিক স্বাধীন রেফারেন্স এনকোডার/ডিকোডার
+tools/check_project_consistency.py  # রিসোর্স/ভিউ-বাইন্ডিং/প্যাকেজ মিল যাচাই (JDK ছাড়াই চলে)
 ```
 
-IR স্ট্যাকে কোনো Android টাইপ নেই, তাই `IrRemoteController` এবং সব বাংলা মেসেজ
-plain JVM-এ টেস্ট করা যায় (`FakeIrHardware` দিয়ে)। UI-এর জন্য কোনো instrumentation
-টেস্ট লাগে না।
+IR স্ট্যাক আর পুরো স্ক্যান ইঞ্জিনে কোনো Android টাইপ নেই, তাই `IrRemoteController`,
+`CodeScanEngine` এবং সব বাংলা মেসেজ plain JVM-এ টেস্ট করা যায় (`FakeIrHardware` আর
+`ManualScanScheduler` দিয়ে)। UI-এর জন্য কোনো instrumentation টেস্ট লাগে না।
 
 ## টেস্ট
 
 ```
 app/src/test/.../NecEncoderTest.kt             # ফ্রেম/রিপিট/বিট-অর্ডার/রেঞ্জ চেক
-app/src/test/.../IrRemoteControllerTest.kt     # পাঠানো, রিপিট, সব এরর পাথ
+app/src/test/.../IrRemoteControllerTest.kt     # পাঠানো, রিপিট, explicit ফ্রেম, সব এরর পাথ
 app/src/test/.../IrAvailabilityDetectorTest.kt # চারটি হার্ডওয়্যার অবস্থা
 app/src/test/.../RemoteCommandTest.kt          # কিপ্যাড কভারেজ, বাংলা লেবেল
 app/src/test/.../RemoteProfilesTest.kt         # টেবিলের শেপ + “যাচাই হয়নি” গ্যারান্টি
-app/src/test/.../RemoteTextTest.kt             # স্ট্যাটাস/কোড শিট টেক্সট
+app/src/test/.../ScannedCodeOverridesTest.kt   # স্ক্যানে পাওয়া কোড কোন প্রোফাইলে বসে
+app/src/test/.../ScannedCodeTest.kt            # সিরিয়ালাইজ/পার্স রাউন্ড-ট্রিপ + গ্যারেজ ইনপুট
+app/src/test/.../ScanPresetTest.kt             # প্রিসেটের আকার, ডি-ডুপ, NEC ফ্রেম বৈধতা
+app/src/test/.../CodeScanEngineTest.kt         # পালস/পজ/স্কিপ/ফাউন্ড/ফেইলিউর/শেষ হওয়া
+app/src/test/.../RemoteTextTest.kt             # স্ট্যাটাস/কোড শিট/স্ক্যান টেক্সট
+app/src/test/.../ManualScanScheduler.kt        # হাতে-চালানো scheduler (টেস্ট হেল্পার)
+app/src/test/.../FakeIrHardware.kt             # নকল IR emitter (টেস্ট হেল্পার)
 tools/verify_nec_reference.py                  # প্রোটোকল স্তরের স্বাধীন যাচাই
+tools/check_project_consistency.py             # রিসোর্স/বাইন্ডিং/প্যাকেজ সামঞ্জস্য (CI-তে চলে)
 ```

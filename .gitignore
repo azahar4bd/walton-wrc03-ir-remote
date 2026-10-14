@@ -15,3 +15,7 @@
 .cxx
 __pycache__/
 *.pyc
+
+# Signing material must never be committed (CI generates/reads it at build time)
+*.keystore
+*.jks

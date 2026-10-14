@@ -3,6 +3,7 @@ name: Android CI
 on:
   push:
     branches: ['**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -31,6 +32,9 @@ jobs:
 
       - name: Verify NEC reference vectors
         run: python3 tools/verify_nec_reference.py
+
+      - name: Check resource / binding / package consistency
+        run: python3 tools/check_project_consistency.py
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -133,3 +137,178 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+  # Pushing a `v*` tag publishes an installable, signed release APK as a GitHub release.
+  release:
+    name: Release APK
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (full history, for the changelog)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Uses the repository keystore when it is stored in secrets, otherwise generates a
+      # throwaway one so the APK is still signed and sideloadable.
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            echo "::notice::Signing with the keystore from repository secrets."
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > release.keystore
+            echo "RELEASE_KEYSTORE_PATH=$GITHUB_WORKSPACE/release.keystore" >> "$GITHUB_ENV"
+            echo "RELEASE_STORE_PASSWORD=$STORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "RELEASE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "RELEASE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "SIGNING_SOURCE=repository keystore (secrets)" >> "$GITHUB_ENV"
+          else
+            echo "::notice::No keystore secret - generating an ephemeral key for this sideload build."
+            keytool -genkeypair -v \
+              -keystore release.keystore \
+              -alias wrc03 \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass wrc03sideload -keypass wrc03sideload \
+              -dname "CN=Walton WRC-03 IR Remote, OU=Community Build, O=azahar4bd, L=Dhaka, C=BD"
+            echo "RELEASE_KEYSTORE_PATH=$GITHUB_WORKSPACE/release.keystore" >> "$GITHUB_ENV"
+            echo "RELEASE_STORE_PASSWORD=wrc03sideload" >> "$GITHUB_ENV"
+            echo "RELEASE_KEY_ALIAS=wrc03" >> "$GITHUB_ENV"
+            echo "RELEASE_KEY_PASSWORD=wrc03sideload" >> "$GITHUB_ENV"
+            echo "SIGNING_SOURCE=ephemeral CI key (sideload only)" >> "$GITHUB_ENV"
+          fi
+
+      - name: Assemble release APK
+        run: |
+          set -euo pipefail
+          ./gradlew assembleRelease --stacktrace \
+            -PreleaseKeystorePath="$RELEASE_KEYSTORE_PATH" \
+            -PreleaseStorePassword="$RELEASE_STORE_PASSWORD" \
+            -PreleaseKeyAlias="$RELEASE_KEY_ALIAS" \
+            -PreleaseKeyPassword="$RELEASE_KEY_PASSWORD"
+
+      - name: Package and checksum the APK
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          APK="walton-wrc03-${VERSION}.apk"
+
+          test -s app/build/outputs/apk/release/app-release.apk
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+          echo "APK_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "APK_BYTES=$(stat -c%s "$APK")" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$(sha256sum "$APK" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+          # Best effort signature check: never blocks the release if the tool is missing.
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          APKSIGNER=""
+          if [ -n "$SDK" ] && [ -d "$SDK/build-tools" ]; then
+            APKSIGNER="$(find "$SDK/build-tools" -name apksigner -type f 2>/dev/null | sort | tail -1 || true)"
+          fi
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs "$APK"
+            echo "APK_SIGNATURE=verified with apksigner" >> "$GITHUB_ENV"
+          else
+            echo "APK_SIGNATURE=apksigner unavailable on this runner" >> "$GITHUB_ENV"
+          fi
+
+      - name: Write release notes
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          PREVIOUS="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          if [ -n "$PREVIOUS" ]; then
+            RANGE="${PREVIOUS}..${TAG}"
+          else
+            RANGE="$TAG"
+          fi
+          CHANGES="$(git log --no-merges --pretty='- %s' "$RANGE")"
+          VERSION_NAME="$(sed -n 's/.*versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)"
+
+          cat > notes.md <<EOF
+          ## ওয়ালটন WRC-03 IR রিমোট — ${APK_VERSION}
+
+          Walton WRC-03 টিভির জন্য native Kotlin IR রিমোট। ফোনের IR blaster দিয়ে সরাসরি
+          38 kHz NEC (6122 ফ্যামিলি) সিগন্যাল যায় — কোনো সার্ভার বা ইন্টারনেট লাগে না।
+
+          ### ইনস্টল
+          1. নিচের **${APK_PATH}** ডাউনলোড করুন।
+          2. ফোনে ফাইলটি খুলুন; “অজানা অ্যাপ ইনস্টল” অনুমতি চাইলে দিয়ে দিন।
+          3. অ্যাপ খুলে উপরের স্ট্যাটাস কার্ডে দেখে নিন ফোনে IR blaster আছে কিনা।
+
+          ### এই সংস্করণে
+          ${CHANGES}
+
+          ### ⚠️ কোড টেবিল যাচাই করা হয়নি
+          বাটন-কোডগুলো কমিউনিটি কোড শিট ও কিছু অনুমান থেকে নেওয়া (অ্যাপ ভার্সন \`${VERSION_NAME}\`)।
+          কোনো বাটন কাজ না করলে অ্যাপের **কোড স্ক্যান মোড** চালান: সম্ভাব্য NEC কোড একে একে
+          পাঠানো হয়, টিভি সাড়া দিলে সেই কোড সংরক্ষিত হয়ে ওই বাটনে বসে যায়। ভুল কোডে টিভির
+          কোনো ক্ষতি হয় না।
+
+          ### বিল্ড তথ্য
+          | | |
+          | --- | --- |
+          | ফাইল | \`${APK_PATH}\` |
+          | আকার | ${APK_BYTES} বাইট |
+          | SHA-256 | \`${APK_SHA256}\` |
+          | স্বাক্ষর | ${SIGNING_SOURCE} — ${APK_SIGNATURE} |
+          | minSdk / targetSdk | 23 / 35 |
+
+          > CI-তে ephemeral কী দিয়ে স্বাক্ষর করা হয়েছে, তাই এটি sideload-এর জন্য; একই কী পরের
+          > রিলিজে থাকবে না। স্থায়ী কী চাইলে \`RELEASE_KEYSTORE_BASE64\` সিক্রেট যোগ করুন।
+          EOF
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          TITLE="ওয়ালটন WRC-03 IR রিমোট ${APK_VERSION}"
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::Release ${TAG} already exists - replacing its APK."
+            gh release upload "$TAG" "$APK_PATH" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
+          else
+            gh release create "$TAG" "$APK_PATH" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TITLE" \
+              --notes-file notes.md
+          fi
+
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY"
+
+      - name: Summarise
+        run: |
+          set -euo pipefail
+          {
+            echo "## Release ${GITHUB_REF_NAME}"
+            echo
+            echo "- APK: \`${APK_PATH}\` (${APK_BYTES} bytes)"
+            echo "- SHA-256: \`${APK_SHA256}\`"
+            echo "- Signing: ${SIGNING_SOURCE} (${APK_SIGNATURE})"
+            echo "- Download: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
+          } >> "$GITHUB_STEP_SUMMARY"

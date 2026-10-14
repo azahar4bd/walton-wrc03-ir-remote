@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.azahar4bd.walton.wrc03.data.RemoteProfiles
+import com.azahar4bd.walton.wrc03.data.ScannedCodeStore
 import com.azahar4bd.walton.wrc03.databinding.ActivityMainBinding
 import com.azahar4bd.walton.wrc03.ir.ConsumerIrHardware
 import com.azahar4bd.walton.wrc03.ir.IrAvailability
@@ -21,6 +22,7 @@ import com.azahar4bd.walton.wrc03.model.CodeConfidence
 import com.azahar4bd.walton.wrc03.model.CommandGroup
 import com.azahar4bd.walton.wrc03.model.RemoteCommand
 import com.azahar4bd.walton.wrc03.model.RemoteProfile
+import com.azahar4bd.walton.wrc03.model.ScannedCode
 import com.azahar4bd.walton.wrc03.ui.RemoteKeypadLayout
 import com.azahar4bd.walton.wrc03.ui.RemoteText
 import com.google.android.material.button.MaterialButton
@@ -39,9 +41,18 @@ private const val REPEAT_INTERVAL_MS = 250L
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var controller: IrRemoteController
+    private lateinit var scannedCodeStore: ScannedCodeStore
 
     private var profile: RemoteProfile = RemoteProfiles.DEFAULT
+
+    /** Codes the user found with the scanner, newest last; they override the shipped table. */
+    private var scannedCodes: List<ScannedCode> = emptyList()
+    private var lastScannedCount: Int = 0
     private val repeatCancellers = mutableListOf<() -> Unit>()
+
+    /** What actually gets beamed: the selected profile with the scanned codes layered on. */
+    private val activeProfile: RemoteProfile
+        get() = profile.withScannedCodes(scannedCodes)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,13 +60,37 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         controller = IrRemoteController(ConsumerIrHardware.create(this))
+        scannedCodeStore = ScannedCodeStore(this)
+        scannedCodes = scannedCodeStore.all()
+        lastScannedCount = scannedCodes.size
 
         setupProfilePicker()
         renderStatus()
         buildKeypad()
 
+        binding.buttonScan.setOnClickListener {
+            startActivity(CodeScanActivity.intent(this, profile.id))
+        }
         binding.buttonCodeList.setOnClickListener { showCodeSheet() }
         binding.buttonHelp.setOnClickListener { showHelp() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Returning from code scan mode: pick up whatever was confirmed on the TV.
+        val stored = scannedCodeStore.all()
+        if (stored != scannedCodes) {
+            val added = stored.size - lastScannedCount
+            scannedCodes = stored
+            lastScannedCount = stored.size
+            updateProfileSummary()
+            buildKeypad()
+            if (added > 0) {
+                Snackbar
+                    .make(binding.root, getString(R.string.scan_saved_message, added), Snackbar.LENGTH_LONG)
+                    .show()
+            }
+        }
     }
 
     override fun onPause() {
@@ -94,6 +129,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateProfileSummary() {
         binding.profileSummary.text = "${RemoteText.profileSummary(profile)}\n${profile.sourceNoteBn}"
+        binding.scannedCodesLine.text = RemoteText.scannedCodesSummary(scannedCodes.size)
     }
 
     private fun renderStatus() {
@@ -141,17 +177,30 @@ class MainActivity : AppCompatActivity() {
                 null,
                 com.google.android.material.R.attr.materialButtonOutlinedStyle,
             )
-        val guessed = profile.codeFor(command)?.confidence == CodeConfidence.GUESS
-        button.text = command.buttonTextBn + if (guessed) " ?" else ""
+        val current = activeProfile
+        button.text = command.buttonTextBn + confidenceBadge(current.codeFor(command)?.confidence)
         button.isAllCaps = false
         button.contentDescription = command.labelBn
         button.textSize = 13f
         button.layoutParams = gridCellParams()
 
         button.setOnClickListener { press(command) }
+        // Long press jumps straight into code scan mode for this very button.
+        button.setOnLongClickListener {
+            startActivity(CodeScanActivity.intent(this, profile.id, command))
+            true
+        }
         if (command.repeatable) attachRepeat(button, command)
         return button
     }
+
+    /** "?" for a guess, "✓" once the scanner has confirmed the code on the real TV. */
+    private fun confidenceBadge(confidence: CodeConfidence?): String =
+        when (confidence) {
+            CodeConfidence.GUESS -> " ?"
+            CodeConfidence.SCANNED -> " ✓"
+            CodeConfidence.DOCUMENTED, null -> ""
+        }
 
     private fun createSpacer(): Space =
         Space(this).apply { layoutParams = gridCellParams() }
@@ -215,7 +264,11 @@ class MainActivity : AppCompatActivity() {
         isRepeat: Boolean = false,
     ) {
         val result =
-            if (isRepeat) controller.sendRepeat(command, profile) else controller.send(command, profile)
+            if (isRepeat) {
+                controller.sendRepeat(command, activeProfile)
+            } else {
+                controller.send(command, activeProfile)
+            }
 
         when (result) {
             is IrSendResult.Sent -> {
@@ -239,7 +292,7 @@ class MainActivity : AppCompatActivity() {
     private fun showCodeSheet() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.code_list_title)
-            .setMessage(RemoteText.codeSheet(profile))
+            .setMessage(RemoteText.codeSheet(activeProfile))
             .setPositiveButton(R.string.action_close, null)
             .show()
     }
