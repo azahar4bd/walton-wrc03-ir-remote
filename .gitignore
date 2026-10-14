@@ -19,3 +19,6 @@ __pycache__/
 # Signing material must never be committed (CI generates/reads it at build time)
 *.keystore
 *.jks
+
+# CI captures the gradle output here so failures can be annotated
+gradle.log

@@ -43,7 +43,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run JVM unit tests
-        run: ./gradlew testDebugUnitTest
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee gradle.log
+
+      - name: Report failures as annotations
+        if: failure()
+        run: python3 tools/report_ci_failure.py gradle.log
 
       - name: Summarise unit test results
         if: always()
@@ -128,7 +134,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Assemble debug APK
-        run: ./gradlew assembleDebug
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee gradle.log
+
+      - name: Report failures as annotations
+        if: failure()
+        run: python3 tools/report_ci_failure.py gradle.log
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -204,7 +216,12 @@ jobs:
             -PreleaseKeystorePath="$RELEASE_KEYSTORE_PATH" \
             -PreleaseStorePassword="$RELEASE_STORE_PASSWORD" \
             -PreleaseKeyAlias="$RELEASE_KEY_ALIAS" \
-            -PreleaseKeyPassword="$RELEASE_KEY_PASSWORD"
+            -PreleaseKeyPassword="$RELEASE_KEY_PASSWORD" \
+            2>&1 | tee gradle.log
+
+      - name: Report failures as annotations
+        if: failure()
+        run: python3 tools/report_ci_failure.py gradle.log
 
       - name: Package and checksum the APK
         run: |
