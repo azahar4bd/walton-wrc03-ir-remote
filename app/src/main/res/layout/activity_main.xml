@@ -149,6 +149,33 @@
 
             <TextView
                 style="@style/SectionTitle"
+                android:text="@string/scan_section_title" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonScan"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/action_scan"
+                android:textAllCaps="false"
+                app:backgroundTint="@color/brand_accent" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/scan_main_hint"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/scannedCodesLine"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                style="@style/SectionTitle"
                 android:text="@string/last_sent_label" />
 
             <TextView

@@ -59,15 +59,27 @@ class IrRemoteController(
         profile: RemoteProfile,
     ): IrSendResult {
         val code = profile.codeFor(command) ?: return IrSendResult.Failed(SendFailure.UNKNOWN_COMMAND)
-        val pattern = NecEncoder.encodeFrame(profile.address, code.command, profile.addressMode)
-        return transmit(
-            carrierHz = profile.carrierHz,
-            pattern = pattern,
+        return send(command, NecFrame(profile.address, code.command, profile.addressMode), profile.carrierHz)
+    }
+
+    /**
+     * Transmit an explicit frame for [command], ignoring any code table.
+     *
+     * This is what the code scanner uses: it sweeps candidate frames until the user says
+     * the TV reacted, so the value on the wire is not (yet) in [RemoteProfile.commands].
+     */
+    fun send(
+        command: RemoteCommand,
+        frame: NecFrame,
+        carrierHz: Int = NecProtocol.CARRIER_FREQUENCY_HZ,
+    ): IrSendResult =
+        transmit(
+            carrierHz = carrierHz,
+            pattern = NecEncoder.encodeFrame(frame),
             command = command,
-            code = code.command,
+            code = frame.command,
             isRepeat = false,
         )
-    }
 
     /**
      * NEC repeat frame (9 ms / 2.25 ms / 562.5 us), sent every

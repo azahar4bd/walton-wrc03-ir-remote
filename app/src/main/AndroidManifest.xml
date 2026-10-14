@@ -26,5 +26,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Code scan mode: sweeps candidate NEC frames until the TV reacts. -->
+        <activity
+            android:name=".CodeScanActivity"
+            android:exported="false"
+            android:label="@string/scan_activity_title"
+            android:parentActivityName=".MainActivity"
+            android:screenOrientation="portrait" />
     </application>
 </manifest>

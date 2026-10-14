@@ -18,6 +18,9 @@ enum class CodeConfidence(
 
     /** Best guess: right protocol, unknown value. Needs capturing from a real remote. */
     GUESS("অনুমান"),
+
+    /** Found on this very TV by the in-app code scanner — the user saw the set react. */
+    SCANNED("স্ক্যানে পাওয়া"),
 }
 
 /** One button's IR payload inside a profile. */
@@ -43,4 +46,26 @@ data class RemoteProfile(
     val verified: Boolean = false,
 ) {
     fun codeFor(command: RemoteCommand): IrCode? = commands[command]
+
+    /**
+     * Same profile, but with the codes the user discovered by scanning layered on top.
+     *
+     * Only records that were found under *this* address block apply (see
+     * [ScannedCode.appliesTo]); the rest are ignored. When several records name the same
+     * button, the newest one wins. Nothing is verified in bulk: a profile stays
+     * `verified = false` until the shipped table itself has been confirmed.
+     */
+    fun withScannedCodes(scanned: List<ScannedCode>): RemoteProfile {
+        val applicable = scanned.filter { it.appliesTo(this) }
+        if (applicable.isEmpty()) return this
+
+        val merged = commands.toMutableMap()
+        applicable.sortedBy { it.foundAtEpochMs }.forEach { record ->
+            merged[record.command] = record.toIrCode()
+        }
+        return copy(commands = merged)
+    }
+
+    /** How many buttons of this profile are driven by a scanned (user confirmed) code. */
+    fun scannedCount(): Int = commands.values.count { it.confidence == CodeConfidence.SCANNED }
 }
