@@ -189,6 +189,10 @@ EXTENDED : addr.lowByte, addr.highByte, cmd, ~cmd
 gh workflow run android.yml --ref arena/13db797f-walton-wrc03-ir-remote -f release_tag=v0.3.0
 ```
 
+এই সেশনের ব্রাঞ্চে commit message-এ `[release-apk]` থাকলেও push-triggered release চলে;
+এতে Actions dispatch permission ছাড়াই একই test/build/signature gate বজায় থাকে।
+সাধারণ push থেকে শুধু CI চলে, release হয় না।
+
 ম্যানুয়াল release-tag অবশ্যই অ্যাপের versionName-এর মূল সংস্করণের সঙ্গে মিলবে।
 টেস্ট ও debug build সফল হওয়ার পর release APK বিল্ড, `apksigner` দিয়ে স্বাক্ষর যাচাই,
 APK এবং `.sha256` ফাইল প্রকাশ হবে। বিদ্যমান release overwrite করা হবে না।

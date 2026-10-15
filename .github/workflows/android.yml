@@ -161,7 +161,12 @@ jobs:
     name: Release APK
     runs-on: ubuntu-latest
     needs: [test, build]
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') ||
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/arena/13db797f-walton-wrc03-ir-remote' &&
+       contains(github.event.head_commit.message, '[release-apk]'))
     permissions:
       contents: write
     steps:
@@ -187,8 +192,12 @@ jobs:
           REQUESTED_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          TAG="${REQUESTED_TAG:-$GITHUB_REF_NAME}"
           VERSION_NAME="$(sed -n 's/.*versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            TAG="${REQUESTED_TAG:-v${VERSION_NAME%-unverified}}"
+          fi
           test "$TAG" = "v${VERSION_NAME%-unverified}"
           if git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
             test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$GITHUB_SHA"

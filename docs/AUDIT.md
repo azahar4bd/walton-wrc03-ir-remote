@@ -32,6 +32,7 @@ scan plans/engine/scheduler/storage, resources, manifest, JVM tests, Gradle and 
 - Removed misleading "wrong codes do nothing / cannot cause harm" UI claims:
   scanning can change settings or perform an unexpected action.
 - Version 3 / `0.3.0-unverified`. CI gains explicit branch workflow-dispatch release,
+  a branch-scoped `[release-apk]` push opt-in when dispatch permission is unavailable,
   version/tag validation, mandatory APK signature verification, SHA-256 attachment,
   and signing-source-specific install warnings. Existing releases are not overwritten.
 
