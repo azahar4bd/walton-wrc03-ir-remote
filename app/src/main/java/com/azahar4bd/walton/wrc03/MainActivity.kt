@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.azahar4bd.walton.wrc03.data.RemoteProfiles
+import com.azahar4bd.walton.wrc03.data.ProfileSelectionStore
 import com.azahar4bd.walton.wrc03.data.ScannedCodeStore
 import com.azahar4bd.walton.wrc03.databinding.ActivityMainBinding
 import com.azahar4bd.walton.wrc03.ir.ConsumerIrHardware
@@ -43,6 +44,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var controller: IrRemoteController
     private lateinit var scannedCodeStore: ScannedCodeStore
 
+    private lateinit var selectionStore: ProfileSelectionStore
+    private val profiles: List<RemoteProfile> get() = RemoteProfiles.includingDiscovered(scannedCodes)
+
     private var profile: RemoteProfile = RemoteProfiles.DEFAULT
 
     /** Codes the user found with the scanner, newest last; they override the shipped table. */
@@ -63,6 +67,8 @@ class MainActivity : AppCompatActivity() {
         scannedCodeStore = ScannedCodeStore(this)
         scannedCodes = scannedCodeStore.all()
         lastScannedCount = scannedCodes.size
+        selectionStore = ProfileSelectionStore(this)
+        profile = profiles.firstOrNull { it.id == selectionStore.selectedId } ?: RemoteProfiles.DEFAULT
 
         setupProfilePicker()
         renderStatus()
@@ -83,7 +89,9 @@ class MainActivity : AppCompatActivity() {
             val added = stored.size - lastScannedCount
             scannedCodes = stored
             lastScannedCount = stored.size
-            updateProfileSummary()
+            profile = profiles.firstOrNull { it.id == selectionStore.selectedId } ?: profile
+            setupProfilePicker()
+            renderStatus()
             buildKeypad()
             if (added > 0) {
                 Snackbar
@@ -101,13 +109,13 @@ class MainActivity : AppCompatActivity() {
     // --- screen set up -------------------------------------------------------
 
     private fun setupProfilePicker() {
-        val names = RemoteProfiles.ALL.map { it.nameBn }
+        val names = profiles.map { it.nameBn }
         val adapter =
             ArrayAdapter(this, android.R.layout.simple_spinner_item, names).also {
                 it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             }
         binding.profileSpinner.adapter = adapter
-        binding.profileSpinner.setSelection(RemoteProfiles.ALL.indexOf(profile))
+        binding.profileSpinner.setSelection(profiles.indexOfFirst { it.id == profile.id }.coerceAtLeast(0))
         binding.profileSpinner.onItemSelectedListener =
             object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(
@@ -116,7 +124,8 @@ class MainActivity : AppCompatActivity() {
                     position: Int,
                     id: Long,
                 ) {
-                    profile = RemoteProfiles.ALL[position]
+                    profile = profiles[position]
+                    selectionStore.selectedId = profile.id
                     updateProfileSummary()
                     renderStatus()
                     buildKeypad()
@@ -129,7 +138,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateProfileSummary() {
         binding.profileSummary.text = "${RemoteText.profileSummary(profile)}\n${profile.sourceNoteBn}"
-        binding.scannedCodesLine.text = RemoteText.scannedCodesSummary(scannedCodes.size)
+        binding.scannedCodesLine.text = RemoteText.scannedCodesSummary(activeProfile.scannedCount())
     }
 
     private fun renderStatus() {
@@ -180,7 +189,7 @@ class MainActivity : AppCompatActivity() {
         val current = activeProfile
         button.text = command.buttonTextBn + confidenceBadge(current.codeFor(command)?.confidence)
         button.isAllCaps = false
-        button.contentDescription = command.labelBn
+        button.contentDescription = command.buttonTextBn
         button.textSize = 13f
         button.layoutParams = gridCellParams()
 
@@ -199,7 +208,8 @@ class MainActivity : AppCompatActivity() {
         when (confidence) {
             CodeConfidence.GUESS -> " ?"
             CodeConfidence.SCANNED -> " ✓"
-            CodeConfidence.DOCUMENTED, null -> ""
+            CodeConfidence.DOCUMENTED -> ""
+            null -> " —"
         }
 
     private fun createSpacer(): Space =
@@ -233,7 +243,9 @@ class MainActivity : AppCompatActivity() {
         button.setOnTouchListener { view, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    cancel()
                     view.isPressed = true
+                    press(command)
                     val repeat =
                         object : Runnable {
                             override fun run() {
@@ -248,7 +260,6 @@ class MainActivity : AppCompatActivity() {
 
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     cancel()
-                    if (event.actionMasked == MotionEvent.ACTION_UP) view.performClick()
                     true
                 }
 

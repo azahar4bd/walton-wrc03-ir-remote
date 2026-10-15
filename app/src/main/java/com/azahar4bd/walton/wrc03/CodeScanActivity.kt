@@ -11,6 +11,9 @@ import android.widget.SeekBar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.azahar4bd.walton.wrc03.data.RemoteProfiles
+import com.azahar4bd.walton.wrc03.data.ProfileSelectionStore
+import com.azahar4bd.walton.wrc03.data.ScannedCodeRecords
+import com.azahar4bd.walton.wrc03.model.ScannedCode
 import com.azahar4bd.walton.wrc03.data.ScannedCodeStore
 import com.azahar4bd.walton.wrc03.databinding.ActivityCodeScanBinding
 import com.azahar4bd.walton.wrc03.ir.ConsumerIrHardware
@@ -50,6 +53,7 @@ class CodeScanActivity : AppCompatActivity() {
     private var preset: ScanPreset = ScanPreset.QUICK
     private var intervalMs: Long = CodeScanEngine.DEFAULT_INTERVAL_MS
     private var engine: CodeScanEngine? = null
+    private var pending: List<ScannedCode> = emptyList()
     private var defaultStateColour: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,7 +66,18 @@ class CodeScanActivity : AppCompatActivity() {
         defaultStateColour = binding.scanStateText.currentTextColor
 
         profile = intentProfile()
-        target = intentTarget()
+        target = savedInstanceState?.getString("target")?.let { name ->
+            RemoteCommand.entries.firstOrNull { it.name == name }
+        } ?: intentTarget()
+        preset = savedInstanceState?.getString("preset")?.let { name ->
+            ScanPreset.entries.firstOrNull { it.name == name }
+        } ?: if (profile.id == RemoteProfiles.VEON.id) ScanPreset.VEON_SCAN else ScanPreset.QUICK
+        intervalMs = savedInstanceState?.getLong("interval", CodeScanEngine.DEFAULT_INTERVAL_MS)
+            ?.coerceIn(CodeScanEngine.MIN_INTERVAL_MS, CodeScanEngine.MAX_INTERVAL_MS)
+            ?: CodeScanEngine.DEFAULT_INTERVAL_MS
+        savedInstanceState?.getBundle("pending")?.let { bundle ->
+            pending = ScannedCodeRecords.decode(bundle.keySet().associateWith { bundle.getString(it) })
+        }
 
         binding.buttonClose.setOnClickListener { finish() }
         binding.buttonStartPause.setOnClickListener { toggleRun() }
@@ -84,11 +99,22 @@ class CodeScanActivity : AppCompatActivity() {
         super.onPause()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        engine?.pause()
+        outState.putString("target", target.name)
+        outState.putString("preset", preset.name)
+        outState.putLong("interval", intervalMs)
+        outState.putBundle("pending", Bundle().apply {
+            ScannedCodeRecords.encode(pending).forEach { (key, value) -> putString(key, value) }
+        })
+        super.onSaveInstanceState(outState)
+    }
+
     // --- set up --------------------------------------------------------------
 
     private fun intentProfile(): RemoteProfile {
         val id = intent.getStringExtra(EXTRA_PROFILE_ID) ?: return RemoteProfiles.DEFAULT
-        return RemoteProfiles.ALL.firstOrNull { it.id == id } ?: RemoteProfiles.DEFAULT
+        return RemoteProfiles.includingDiscovered(store.all()).firstOrNull { it.id == id } ?: RemoteProfiles.DEFAULT
     }
 
     private fun intentTarget(): RemoteCommand {
@@ -97,7 +123,7 @@ class CodeScanActivity : AppCompatActivity() {
     }
 
     private fun setupCommandSpinner() {
-        val labels = RemoteCommand.entries.map { it.labelBn }
+        val labels = RemoteCommand.entries.map { it.buttonTextBn }
         binding.scanCommandSpinner.adapter = spinnerAdapter(labels)
         binding.scanCommandSpinner.setSelection(RemoteCommand.entries.indexOf(target))
         binding.scanCommandSpinner.onItemSelectedListener =
@@ -143,7 +169,7 @@ class CodeScanActivity : AppCompatActivity() {
 
     private fun setupIntervalSeek() {
         binding.scanIntervalSeek.max = INTERVAL_STEPS
-        binding.scanIntervalSeek.progress = stepsFor(CodeScanEngine.DEFAULT_INTERVAL_MS)
+        binding.scanIntervalSeek.progress = stepsFor(intervalMs)
         binding.scanIntervalSeek.setOnSeekBarChangeListener(
             object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(
@@ -224,9 +250,13 @@ class CodeScanActivity : AppCompatActivity() {
     }
 
     private fun saveAndClose() {
-        val records = engine?.found.orEmpty()
+        val records = pending
         if (records.isNotEmpty()) {
             store.saveAll(records)
+            // Activate the profile that can actually replay the last confirmed frame.
+            val last = records.maxByOrNull { it.foundAtEpochMs }
+            RemoteProfiles.includingDiscovered(store.all()).firstOrNull { last?.appliesTo(it) == true }
+                ?.let { ProfileSelectionStore(this).selectedId = it.id }
             setResult(RESULT_OK, Intent().putExtra(EXTRA_SAVED_COUNT, records.size))
         }
         finish()
@@ -235,16 +265,17 @@ class CodeScanActivity : AppCompatActivity() {
     // --- rendering -----------------------------------------------------------
 
     private fun render(snapshot: ScanSnapshot) {
+        pending = ScannedCodeRecords.merge(pending + snapshot.found)
         binding.scanCurrentCode.text = RemoteText.scanCandidateLine(snapshot.candidate)
         binding.scanStateText.text = RemoteText.scanStateLine(snapshot)
         binding.scanProgressText.text = RemoteText.scanProgress(snapshot)
         binding.scanProgress.progress = (snapshot.progress * PROGRESS_MAX).roundToInt()
-        binding.scanFoundList.text = RemoteText.scanFoundSheet(snapshot.found)
+        binding.scanFoundList.text = RemoteText.scanFoundSheet(pending)
 
         binding.buttonStartPause.text = RemoteText.scanStartPauseLabel(snapshot.state)
         binding.buttonFound.isEnabled = snapshot.canMarkFound
         binding.buttonStep.isEnabled = snapshot.isRunning
-        binding.buttonSaveClose.isEnabled = snapshot.found.isNotEmpty()
+        binding.buttonSaveClose.isEnabled = pending.isNotEmpty()
 
         val failed = snapshot.state == ScanState.FAILED
         binding.scanStateText.setTextColor(

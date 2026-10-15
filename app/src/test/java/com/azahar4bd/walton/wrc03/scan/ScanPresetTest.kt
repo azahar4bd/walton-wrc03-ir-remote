@@ -18,13 +18,36 @@ class ScanPresetTest {
     private val profile = RemoteProfiles.DEFAULT
 
     @Test
-    fun theQuickSweepIsTheProfileBlocksTimesThePublishedSheet() {
+    fun theQuickSweepUsesEachProfilesOwnDocumentedCodes() {
         val plan = ScanPreset.QUICK.planFor(RemoteCommand.POWER, profile)
 
-        assertEquals(ScanAddressBlocks.PROFILE.size * ScanCodeSets.DOCUMENTED_SHEET.size, plan.size)
-        assertEquals(3 * 18, plan.size)
+        assertEquals(3 * 18 + 26, plan.size)
+        assertTrue(plan.candidates.any { it.address == 0x08 && it.commandByte == 0xD7 })
+        assertTrue(plan.candidates.none { it.address == 0x08 && it.commandByte == 0x45 })
         assertEquals(RemoteCommand.POWER, plan.target)
         assertEquals(ScanPreset.QUICK.titleBn, plan.presetTitleBn)
+    }
+
+    @Test
+    fun veonSweepPrioritizesTheSelectedButtonAndCoversAllBytesOnce() {
+        RemoteCommand.entries.forEach { command ->
+            val veon = RemoteProfiles.VEON
+            val plan = ScanPreset.VEON_SCAN.planFor(command, profile)
+            assertEquals(256, plan.size)
+            assertEquals((0..255).toSet(), plan.candidates.map { it.commandByte }.toSet())
+            plan.candidates.forEach {
+                assertEquals(0x08, it.address)
+                assertEquals(NecAddressMode.STANDARD, it.addressMode)
+            }
+            veon.codeFor(command)?.let { assertEquals(it.command, plan.candidates.first().commandByte) }
+        }
+    }
+
+    @Test
+    fun quickScanStartsWithSelectedProfilesOwnCodes() {
+        val plan = ScanPreset.QUICK.planFor(RemoteCommand.POWER, RemoteProfiles.VEON)
+        assertEquals(0x08, plan.candidates.first().address)
+        assertEquals(0xD7, plan.candidates.first().commandByte)
     }
 
     @Test

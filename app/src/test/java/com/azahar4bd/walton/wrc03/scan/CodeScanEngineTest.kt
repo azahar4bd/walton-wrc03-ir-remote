@@ -279,6 +279,8 @@ class CodeScanEngineTest {
         assertEquals(0, h.hardware.transmissions.size)
         assertFalse(h.scheduler.hasPending)
         assertTrue(snapshot.isFinished)
+        assertFalse(snapshot.canMarkFound)
+        assertTrue(h.engine.markFound(1L).found.isEmpty())
     }
 
     @Test

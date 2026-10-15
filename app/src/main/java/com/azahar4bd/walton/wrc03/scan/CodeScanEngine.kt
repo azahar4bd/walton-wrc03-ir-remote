@@ -109,7 +109,7 @@ class CodeScanEngine(
      */
     fun markFound(foundAtEpochMs: Long): ScanSnapshot {
         val candidate = currentCandidate
-        if (candidate != null) {
+        if (candidate != null && snapshot().canMarkFound) {
             val record =
                 ScannedCode(
                     command = plan.target,

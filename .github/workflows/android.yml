@@ -6,6 +6,12 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Publish tested APK (e.g. v0.3.0); leave empty for CI only'
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -155,7 +161,7 @@ jobs:
     name: Release APK
     runs-on: ubuntu-latest
     needs: [test, build]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
     permissions:
       contents: write
     steps:
@@ -175,6 +181,19 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate release identity
+        env:
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          TAG="${REQUESTED_TAG:-$GITHUB_REF_NAME}"
+          VERSION_NAME="$(sed -n 's/.*versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)"
+          test "$TAG" = "v${VERSION_NAME%-unverified}"
+          if git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$GITHUB_SHA"
+          fi
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
 
       # Uses the repository keystore when it is stored in secrets, otherwise generates a
       # throwaway one so the APK is still signed and sideloadable.
@@ -226,7 +245,7 @@ jobs:
       - name: Package and checksum the APK
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
+          TAG="$RELEASE_TAG"
           VERSION="${TAG#v}"
           APK="walton-wrc03-${VERSION}.apk"
 
@@ -238,7 +257,9 @@ jobs:
           echo "APK_BYTES=$(stat -c%s "$APK")" >> "$GITHUB_ENV"
           echo "APK_SHA256=$(sha256sum "$APK" | cut -d' ' -f1)" >> "$GITHUB_ENV"
 
-          # Best effort signature check: never blocks the release if the tool is missing.
+          sha256sum "$APK" > "$APK.sha256"
+
+          # Never publish an APK without verifying its signing certificate.
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
           APKSIGNER=""
           if [ -n "$SDK" ] && [ -d "$SDK/build-tools" ]; then
@@ -248,26 +269,33 @@ jobs:
             "$APKSIGNER" verify --print-certs "$APK"
             echo "APK_SIGNATURE=verified with apksigner" >> "$GITHUB_ENV"
           else
-            echo "APK_SIGNATURE=apksigner unavailable on this runner" >> "$GITHUB_ENV"
+            echo "::error::apksigner missing; refusing to publish an unchecked APK"
+            exit 1
           fi
 
       - name: Write release notes
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          PREVIOUS="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          TAG="$RELEASE_TAG"
+          PREVIOUS="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
           if [ -n "$PREVIOUS" ]; then
-            RANGE="${PREVIOUS}..${TAG}"
+            RANGE="${PREVIOUS}..HEAD"
           else
-            RANGE="$TAG"
+            RANGE="HEAD"
           fi
           CHANGES="$(git log --no-merges --pretty='- %s' "$RANGE")"
           VERSION_NAME="$(sed -n 's/.*versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)"
 
+          if [[ "$SIGNING_SOURCE" == ephemeral* ]]; then
+            SIGNING_NOTE="Ephemeral CI key: an older APK may need to be uninstalled before installing this one (uninstalling removes saved codes). Future builds will not share this key."
+          else
+            SIGNING_NOTE="Signed with the repository keystore. Updates require the same signing certificate."
+          fi
+
           cat > notes.md <<EOF
           ## ওয়ালটন WRC-03 IR রিমোট — ${APK_VERSION}
 
-          Walton WRC-03 টিভির জন্য native Kotlin IR রিমোট। ফোনের IR blaster দিয়ে সরাসরি
+          Walton WRC-03 ও VEON (Veon_2445 / xm_1_4375) প্রোফাইলসহ native Kotlin IR রিমোট। ফোনের IR blaster দিয়ে সরাসরি
           38 kHz NEC (6122 ফ্যামিলি) সিগন্যাল যায় — কোনো সার্ভার বা ইন্টারনেট লাগে না।
 
           ### ইনস্টল
@@ -276,13 +304,18 @@ jobs:
           3. অ্যাপ খুলে উপরের স্ট্যাটাস কার্ডে দেখে নিন ফোনে IR blaster আছে কিনা।
 
           ### এই সংস্করণে
+          - VEON NEC 0x08 প্রোফাইল: উৎসভিত্তিক ২৬টি বাটন; অজানা কোড বানিয়ে দেওয়া হয়নি।
+          - VEON স্ক্যানে নির্বাচিত বাটনের পরিচিত কোড আগে, তারপর পুরো ২৫৬ বাইট।
+          - স্ক্যানের ফল বাটন/প্রিসেট বদলালেও থাকে; ঠিকানাভিত্তিক সংরক্ষণে Walton ও VEON কোড আলাদা।
+          - প্রোফাইল মনে রাখা, স্ক্যানে পাওয়া নতুন ঠিকানা ব্যবহার, ব্যর্থ সিগন্যাল সংরক্ষণ রোধ।
+
           ${CHANGES}
 
           ### ⚠️ কোড টেবিল যাচাই করা হয়নি
           বাটন-কোডগুলো কমিউনিটি কোড শিট ও কিছু অনুমান থেকে নেওয়া (অ্যাপ ভার্সন \`${VERSION_NAME}\`)।
           কোনো বাটন কাজ না করলে অ্যাপের **কোড স্ক্যান মোড** চালান: সম্ভাব্য NEC কোড একে একে
-          পাঠানো হয়, টিভি সাড়া দিলে সেই কোড সংরক্ষিত হয়ে ওই বাটনে বসে যায়। ভুল কোডে টিভির
-          কোনো ক্ষতি হয় না।
+          পাঠানো হয়। শুধু নির্বাচিত কাজটি ঘটলেই নিশ্চিত করুন ও সংরক্ষণ করুন। অজানা কোডে
+          সেটিংস বা ভলিউম বদলাতে পারে; নজর রাখুন। বাস্তব টিভিতে পরীক্ষা হয়নি।
 
           ### বিল্ড তথ্য
           | | |
@@ -293,8 +326,7 @@ jobs:
           | স্বাক্ষর | ${SIGNING_SOURCE} — ${APK_SIGNATURE} |
           | minSdk / targetSdk | 23 / 35 |
 
-          > CI-তে ephemeral কী দিয়ে স্বাক্ষর করা হয়েছে, তাই এটি sideload-এর জন্য; একই কী পরের
-          > রিলিজে থাকবে না। স্থায়ী কী চাইলে \`RELEASE_KEYSTORE_BASE64\` সিক্রেট যোগ করুন।
+          > ${SIGNING_NOTE}
           EOF
 
       - name: Publish the GitHub release
@@ -302,19 +334,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
+          TAG="$RELEASE_TAG"
           TITLE="ওয়ালটন WRC-03 IR রিমোট ${APK_VERSION}"
 
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::notice::Release ${TAG} already exists - replacing its APK."
-            gh release upload "$TAG" "$APK_PATH" --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
-          else
-            gh release create "$TAG" "$APK_PATH" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$TITLE" \
-              --notes-file notes.md
-          fi
+          # Do not replace an existing public release or attach a build to the wrong tag.
+          gh release create "$TAG" "$APK_PATH" "$APK_PATH.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TITLE" \
+            --notes-file notes.md
 
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY"
 
@@ -322,10 +350,10 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## Release ${GITHUB_REF_NAME}"
+            echo "## Release ${RELEASE_TAG}"
             echo
             echo "- APK: \`${APK_PATH}\` (${APK_BYTES} bytes)"
             echo "- SHA-256: \`${APK_SHA256}\`"
             echo "- Signing: ${SIGNING_SOURCE} (${APK_SIGNATURE})"
-            echo "- Download: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
+            echo "- Download: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
           } >> "$GITHUB_STEP_SUMMARY"

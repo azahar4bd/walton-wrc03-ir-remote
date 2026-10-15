@@ -45,7 +45,7 @@ data class ScanSnapshot(
     val progress: Float get() = if (total <= 0) 0f else sentCount.toFloat() / total.toFloat()
 
     /** The button may only be pressed once something has actually gone out. */
-    val canMarkFound: Boolean get() = candidate != null
+    val canMarkFound: Boolean get() = candidate != null && state != ScanState.FAILED && state != ScanState.IDLE
 
     val isFinished: Boolean get() = state == ScanState.FINISHED || state == ScanState.FAILED
 }

@@ -72,7 +72,7 @@ object ScanPlanBuilder {
                 commandBytes.map { byte ->
                     ScanCandidate(block.address, block.mode, byte, carrierHz)
                 }
-            }.distinctBy { it.wireBytes() }
+            }.distinctBy { it.carrierHz to it.wireBytes() }
 
         return ScanPlan(target, presetTitleBn, candidates)
     }

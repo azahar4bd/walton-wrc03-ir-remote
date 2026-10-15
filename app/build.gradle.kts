@@ -30,8 +30,8 @@ android {
         // 0.x => the IR code table shipped with this build is NOT verified (see README).
         // Code scan mode lets a user confirm codes on their own TV; the table itself is
         // still community sourced.
-        versionCode = 2
-        versionName = "0.2.0-unverified"
+        versionCode = 3
+        versionName = "0.3.0-unverified"
     }
 
     signingConfigs {

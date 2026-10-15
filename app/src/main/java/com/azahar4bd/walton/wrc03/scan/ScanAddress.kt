@@ -32,11 +32,11 @@ data class ScanAddress(
 
 /** Address blocks worth trying, in "most likely first" order. */
 object ScanAddressBlocks {
-    /** The three blocks the shipped profiles use. */
+    /** The distinct blocks the shipped profiles use. */
     val PROFILE: List<ScanAddress> =
-        RemoteProfiles.ALL.map { profile ->
+        distinctOnWire(RemoteProfiles.ALL.map { profile ->
             ScanAddress(profile.address, profile.addressMode, profile.nameBn)
-        }
+        })
 
     /**
      * [PROFILE] plus the byte-swapped / zero variants that 6122-family handsets are

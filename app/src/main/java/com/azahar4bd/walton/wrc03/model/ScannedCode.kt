@@ -2,6 +2,7 @@ package com.azahar4bd.walton.wrc03.model
 
 import com.azahar4bd.walton.wrc03.ir.NecAddressMode
 import com.azahar4bd.walton.wrc03.ir.NecProtocol
+import com.azahar4bd.walton.wrc03.ir.NecFrame
 
 /**
  * One button code the user discovered with the in-app code scanner (see package `scan`).
@@ -33,14 +34,21 @@ data class ScannedCode(
                     "EXTENDED address must fit in 16 bits, got 0x${address.toString(16)}"
                 }
         }
+        require(carrierHz > 0) { "carrier must be positive" }
         require(code in 0x00..0xFF) { "code must fit in one byte, got 0x${code.toString(16)}" }
     }
 
     /** A record only overrides a profile that beams the very same address block. */
     fun appliesTo(profile: RemoteProfile): Boolean =
-        profile.address == address &&
-            profile.addressMode == addressMode &&
+        NecFrame(profile.address, 0, profile.addressMode).wireBytes().take(2) ==
+            NecFrame(address, 0, addressMode).wireBytes().take(2) &&
             profile.carrierHz == carrierHz
+
+    /** Stable key per button + on-wire address + carrier; v0.2 command-only keys migrate. */
+    fun storageKey(): String {
+        val bytes = NecFrame(address, 0, addressMode).wireBytes().take(2)
+        return "${command.name}:${bytes[0]}:${bytes[1]}:$carrierHz"
+    }
 
     fun toIrCode(): IrCode = IrCode(code, CodeConfidence.SCANNED)
 

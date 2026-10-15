@@ -6,6 +6,7 @@ import com.azahar4bd.walton.wrc03.model.CodeConfidence
 import com.azahar4bd.walton.wrc03.model.IrCode
 import com.azahar4bd.walton.wrc03.model.RemoteCommand
 import com.azahar4bd.walton.wrc03.model.RemoteProfile
+import com.azahar4bd.walton.wrc03.model.ScannedCode
 
 /**
  * ---------------------------------------------------------------------------
@@ -27,8 +28,8 @@ import com.azahar4bd.walton.wrc03.model.RemoteProfile
  *    ক্যাপচার না করা পর্যন্ত এগুলো কাজ করবে কিনা কেউ জানে না।
  *
  * আসল কোড কীভাবে ক্যাপচার করে এখানে বসাবেন, সেটা README-এর
- * "কোড টেবিল কীভাবে ঠিক করবেন" অংশে লেখা আছে। ভুল হলে টিভি কিছুই করবে না —
- * কোনো ক্ষতি হবে না, শুধু বাটন কাজ করবে না।
+ * "কোড টেবিল কীভাবে ঠিক করবেন" অংশে লেখা আছে। অজানা কোড অন্য কোনো কাজ করতে পারে;
+ * স্ক্যানের সময় টিভির দিকে নজর রাখুন।
  */
 private val documented: Int.() -> IrCode = { IrCode(this, CodeConfidence.DOCUMENTED) }
 private val guess: Int.() -> IrCode = { IrCode(this, CodeConfidence.GUESS) }
@@ -103,12 +104,32 @@ object RemoteProfiles {
             sourceNoteBn = SOURCE_NOTE_BN,
         )
 
-    val ALL: List<RemoteProfile> = listOf(PROFILE_A, PROFILE_B, PROFILE_C)
+    val VEON: RemoteProfile = VeonProfile.PROFILE
+
+    val ALL: List<RemoteProfile> = listOf(PROFILE_A, PROFILE_B, PROFILE_C, VEON)
 
     /** Shown on first launch. Same table as B/C, only the address block differs. */
     val DEFAULT: RemoteProfile = PROFILE_A
 
     val CARRIER_HZ: Int = NecProtocol.CARRIER_FREQUENCY_HZ
+
+    /** Keep scans at non-shipped COMMON addresses usable without inventing any codes. */
+    fun includingDiscovered(records: List<ScannedCode>): List<RemoteProfile> {
+        val discovered = records.filter { record -> ALL.none { record.appliesTo(it) } }
+            .distinctBy { it.storageKey().substringAfter(':') }
+            .map { record ->
+                RemoteProfile(
+                    id = "scanned-${record.storageKey().substringAfter(':')}",
+                    nameBn = "স্ক্যানে পাওয়া · ${record.addressHex()} · ${record.carrierHz} Hz",
+                    address = record.address,
+                    addressMode = record.addressMode,
+                    carrierHz = record.carrierHz,
+                    commands = emptyMap(),
+                    sourceNoteBn = "শুধু আপনার নিশ্চিত করা কোডগুলো আছে; বাকি বাটনে স্ক্যান চালান।",
+                )
+            }
+        return ALL + discovered
+    }
 
     fun byId(id: String): RemoteProfile = ALL.first { it.id == id }
 }

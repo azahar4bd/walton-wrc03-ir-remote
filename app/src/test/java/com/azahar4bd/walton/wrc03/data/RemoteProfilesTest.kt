@@ -27,8 +27,8 @@ class RemoteProfilesTest {
     }
 
     @Test
-    fun everyProfileCoversEveryButton() {
-        RemoteProfiles.ALL.forEach { profile ->
+    fun legacyWaltonProfilesCoverEveryButton() {
+        listOf(RemoteProfiles.PROFILE_A, RemoteProfiles.PROFILE_B, RemoteProfiles.PROFILE_C).forEach { profile ->
             RemoteCommand.entries.forEach { command ->
                 assertTrue(
                     "${profile.id} is missing ${command.name}",
